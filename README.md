@@ -176,47 +176,71 @@ GPIO 模式：上拉输入 `GPIO_Mode_IPU`
 
 ### 5.2 任务流程图（Mermaid）
 
-> GitHub 支持 Mermaid，直接渲染。该流程图严格对应工程里的任务/接口：`Display_RequestRefresh()` 用任务通知唤醒 `Display_Task`。
+#### 一、系统初始化与任务创建阶段（主线流程）
 
-flowchart TD
-  A[main(): SystemInit + OLED_Init + Peripheral_Init] --> B[xTaskCreate(): Key/Tick/UI/Sensor/Display/Step]
-  B --> C[vTaskStartScheduler]
+1. **入口起点**：程序从`main()`函数开始执行，首先完成核心初始化工作，包括系统级初始化（SystemInit）、OLED 显示屏初始化（OLED_Init）以及各类外设初始化（Peripheral_Init）。
+2. **任务创建**：初始化完成后，调用`xTaskCreate()`函数创建 6 个 FreeRTOS 任务，分别是：按键任务（Key_Task）、时基任务（Tick_Task）、UI 界面任务（UI_Task）、传感器任务（Sensor_Task）、显示刷新任务（Display_Task）、计步任务（Step_Task）。
+3. **启动调度器**：所有任务创建完毕后，调用`vTaskStartScheduler()`启动 FreeRTOS 任务调度器，系统开始按任务优先级和周期调度执行各个任务。
 
-  subgraph T1[Key_Task (1ms)]
-    K1[Key_Tick()] --> K2[Key3_Tick()]
-  end
+#### 二、各任务的具体执行逻辑（并行运行）
 
-  subgraph T2[Tick_Task (1ms)]
-    T21[StopWatch_Tick()] --> T22[Dino_Tick()]
-  end
+##### 1. 按键任务（Key_Task，执行周期 1ms）
 
-  subgraph T3[UI_Task]
-    U1[First_Page_Clock()] -->|ret=1| U2[Menu()]
-    U1 -->|ret=2| U3[SettingPage()]
-    U2 --> U4[绘制到 OLED_DisplayBuf]
-    U3 --> U4
-    U4 --> U5[Display_RequestRefresh()]
-  end
+- 首先执行`Key_Tick()`函数，完成通用按键的扫描与状态更新；
+- 接着执行`Key3_Tick()`函数，专门处理 Key3 按键的状态检测与 Tick 计数。
 
-  subgraph T4[Sensor_Task (2s)]
-    S0[启动延迟 1500ms] --> S1[DHT11_CacheUpdate()]
-    S1 -->|首次成功| S2[Display_RequestRefresh()]
-    S1 --> S3[周期 2000ms 更新]
-  end
+##### 2. 时基任务（Tick_Task，执行周期 1ms）
 
-  subgraph T5[Step_Task (5ms)]
-    P1[Steps_BackgroundTick()] --> P2[MPU6050_Calculation()]
-    P2 --> P3[Yaw 阈值判定计步]
-  end
+- 先执行`StopWatch_Tick()`函数，为秒表功能提供时间基准；
+- 再执行`Dino_Tick()`函数，为恐龙小游戏提供运行时基。
 
-  subgraph T6[Display_Task]
-    D1[ulTaskNotifyTake(阻塞等待)] --> D2[OLED_Lock]
-    D2 --> D3[OLED_Update()]
-    D3 --> D4[OLED_Unlock]
-  end
+##### 3. UI 界面任务（UI_Task，无固定周期，按需执行）
 
-  U5 --> D1
-  S2 --> D1
+- 初始显示时钟首页（First_Page_Clock()）；
+
+  - 若返回值`ret=1`，进入菜单页面（`Menu()`）；
+  - 若返回值`ret=2`，进入设置页面（`SettingPage()`）；
+
+  
+
+- 菜单页面或设置页面执行完成后，将对应的界面内容绘制到 OLED 显示缓冲区（`OLED_DisplayBuf`）；
+
+- 绘制完成后调用`Display_RequestRefresh()`函数，请求刷新 OLED 显示。
+
+##### 4. 传感器任务（Sensor_Task，执行周期 2s）
+
+- 任务启动后先延迟 1500ms，避免系统初始化阶段的资源冲突；
+
+- 延迟结束后执行DHT11_CacheUpdate()函数，更新 DHT11 温湿度传感器的缓存数据；
+
+  - 若本次是传感器首次成功获取数据，调用`Display_RequestRefresh()`函数请求刷新显示；
+  - 无论是否首次成功，任务都会按 2000ms 的周期重复执行数据更新操作。
+
+  
+
+##### 5. 计步任务（Step_Task，执行周期 5ms）
+
+- 首先执行`Steps_BackgroundTick()`函数，完成计步功能的后台时基处理；
+- 接着调用`MPU6050_Calculation()`函数，对 MPU6050 传感器数据进行计算处理；
+- 最后根据计算得到的偏航角（Yaw）进行阈值判定，符合条件则累计步数。
+
+##### 6. 显示刷新任务（Display_Task，阻塞等待触发）
+
+- 任务通过`ulTaskNotifyTake()`函数阻塞等待外部的刷新通知（不占用 CPU 资源）；
+- 收到通知后先调用`OLED_Lock()`函数锁定 OLED 资源，防止多任务冲突；
+- 然后执行`OLED_Update()`函数，将显示缓冲区的数据刷新到 OLED 屏幕；
+- 刷新完成后调用`OLED_Unlock()`函数解锁 OLED 资源，释放占用。
+
+#### 三、任务间的交互逻辑
+
+- UI 任务中调用的`Display_RequestRefresh()`会触发显示刷新任务的`ulTaskNotifyTake()`，使其退出阻塞并执行显示更新；
+- 传感器任务首次成功获取数据时调用的`Display_RequestRefresh()`，同样会触发显示刷新任务执行 OLED 更新。
+
+### 总结
+
+1. 系统核心流程：初始化 → 创建 6 个任务 → 启动调度器，各任务并行执行；
+2. 任务特性：不同任务有不同执行周期（1ms/2s/5ms），显示任务为阻塞触发式，UI 任务按需执行；
+3. 交互核心：UI 任务和传感器任务通过`Display_RequestRefresh()`触发显示任务，完成 OLED 屏幕刷新，保证显示数据的实时性。
 
 ## 6. 关键代码机制分析（基于真实函数）
 
@@ -343,23 +367,29 @@ flowchart TD
 
 ### 10.2 页面跳转关系（逻辑真实）
 
-```
-flowchart LR
-  A[上电] --> B[First_Page_Clock]
-  B -->|按键| C[Menu]
+1. **初始启动**：设备上电后，系统首先进入时钟首页（`First_Page_Clock`），这是整个界面系统的默认初始页面。
 
-  C --> C1[StopWatch]
-  C --> C2[Steps]
-  C --> C3[Show_Record]
-  C --> C4[SettingPage]
-  C --> C5[Dino]
+2. **触发菜单**：在时钟首页（`First_Page_Clock`）下，用户按下指定按键后，界面会从时钟首页跳转到主菜单页面（`Menu`）。
 
-  C1 --> C
-  C2 --> C
-  C3 --> C
-  C4 --> C
-  C5 --> C
-```
+3. 菜单分支选择
+
+   ：主菜单页面（Menu）包含 5 个可选择的功能项，用户可通过按键选择进入对应功能页面：
+
+   - 选择第一项：进入秒表功能页面（`StopWatch`）；
+   - 选择第二项：进入计步功能页面（`Steps`）；
+   - 选择第三项：进入记录查看页面（`Show_Record`）；
+   - 选择第四项：进入系统设置页面（`SettingPage`）；
+   - 选择第五项：进入恐龙小游戏页面（`Dino`）。
+
+   
+
+4. **返回主菜单**：无论进入上述哪一个功能页面（`StopWatch`/`Steps`/`Show_Record`/`SettingPage`/`Dino`），用户均可通过按键操作返回主菜单页面（`Menu`），形成闭环的界面交互逻辑。
+
+### 总结
+
+1. 核心流程：上电→时钟首页→（按键触发）主菜单→各功能页面→（按键）返回主菜单；
+2. 交互特点：所有功能页面均以主菜单为中转，最终均可返回主菜单，界面跳转逻辑闭环；
+3. 触发方式：界面跳转的核心触发条件是**按键操作**，无自动跳转逻辑。
 
 - **所有页面最终都回到 `Menu()`**
 - 页面切换通过按键值（`Key_GetNum()`）驱动
