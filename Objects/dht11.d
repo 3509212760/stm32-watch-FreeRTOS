@@ -30,3 +30,15 @@
 .\objects\dht11.o: .\Library\stm32f10x_wwdg.h
 .\objects\dht11.o: .\Library\misc.h
 .\objects\dht11.o: .\System\Delay.h
+.\objects\dht11.o: .\FreeRTOS\include\FreeRTOS.h
+.\objects\dht11.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stddef.h
+.\objects\dht11.o: .\User\FreeRTOSConfig.h
+.\objects\dht11.o: .\FreeRTOS\include\projdefs.h
+.\objects\dht11.o: .\FreeRTOS\include\portable.h
+.\objects\dht11.o: .\FreeRTOS\include\deprecated_definitions.h
+.\objects\dht11.o: .\FreeRTOS\portable\RVDS\ARM_CM3\portmacro.h
+.\objects\dht11.o: .\FreeRTOS\include\mpu_wrappers.h
+.\objects\dht11.o: .\FreeRTOS\include\task.h
+.\objects\dht11.o: .\FreeRTOS\include\list.h
+.\objects\dht11.o: .\FreeRTOS\include\semphr.h
+.\objects\dht11.o: .\FreeRTOS\include\queue.h

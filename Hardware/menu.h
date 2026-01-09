@@ -19,4 +19,12 @@ int Start_Steps();
 int Show_Record();
 int DHT11(void);
 int DHT11_Page(void);
+
+/* ===== Steps background task interface (ÐÂÔö) ===== */
+void Steps_BackgroundInit(void);
+void Steps_SetRunning(uint8_t en);
+void Steps_ResetSession(void);
+uint16_t Steps_GetSession(void);
+void Steps_BackgroundTick(void);
+
 #endif

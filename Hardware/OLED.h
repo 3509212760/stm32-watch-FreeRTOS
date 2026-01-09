@@ -23,6 +23,12 @@
 /*初始化函数*/
 void OLED_Init(void);
 
+/* ===== FreeRTOS OLED Mutex（新增） ===== */
+void OLED_MutexInit(void);
+void OLED_Lock(void);
+void OLED_Unlock(void);
+
+
 /*更新函数*/
 void OLED_Update(void);
 void OLED_UpdateArea(int16_t X, int16_t Y, uint8_t Width, uint8_t Height);

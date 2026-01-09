@@ -29,3 +29,15 @@
 .\objects\key.o: .\Library\stm32f10x_wwdg.h
 .\objects\key.o: .\Library\misc.h
 .\objects\key.o: .\System\Delay.h
+.\objects\key.o: Hardware\Key.h
+.\objects\key.o: .\FreeRTOS\include\FreeRTOS.h
+.\objects\key.o: D:\Keil5\ARM\ARMCC\Bin\..\include\stddef.h
+.\objects\key.o: .\User\FreeRTOSConfig.h
+.\objects\key.o: .\FreeRTOS\include\projdefs.h
+.\objects\key.o: .\FreeRTOS\include\portable.h
+.\objects\key.o: .\FreeRTOS\include\deprecated_definitions.h
+.\objects\key.o: .\FreeRTOS\portable\RVDS\ARM_CM3\portmacro.h
+.\objects\key.o: .\FreeRTOS\include\mpu_wrappers.h
+.\objects\key.o: .\FreeRTOS\include\task.h
+.\objects\key.o: .\FreeRTOS\include\list.h
+.\objects\key.o: .\FreeRTOS\include\queue.h

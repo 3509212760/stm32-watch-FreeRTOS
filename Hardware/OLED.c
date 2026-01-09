@@ -25,6 +25,11 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "semphr.h"
+
 /**
   * 数据存储格式：
   * 纵向8点，高位在下，先从左到右，再从上到下
@@ -206,6 +211,41 @@ void OLED_I2C_SendByte(uint8_t Byte)
 	OLED_W_SCL(0);
 }
 
+/* ================= OLED Mutex (FreeRTOS) ================= */
+static SemaphoreHandle_t s_oledMutex = NULL;
+
+static BaseType_t OLED_IsSchedulerRunning(void)
+{
+    return (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING);
+}
+
+void OLED_MutexInit(void)
+{
+    if (s_oledMutex == NULL)
+    {
+        /* 递归互斥锁，避免 OLED_Update 内部调用写函数时死锁 */
+        s_oledMutex = xSemaphoreCreateRecursiveMutex();
+    }
+}
+
+void OLED_Lock(void)
+{
+    if (s_oledMutex != NULL && OLED_IsSchedulerRunning())
+    {
+        /* 不建议在中断里调用OLED显示；这里不做ISR判断，保持简单 */
+        (void)xSemaphoreTakeRecursive(s_oledMutex, portMAX_DELAY);
+    }
+}
+
+void OLED_Unlock(void)
+{
+    if (s_oledMutex != NULL && OLED_IsSchedulerRunning())
+    {
+        (void)xSemaphoreGiveRecursive(s_oledMutex);
+    }
+}
+
+
 /**
   * 函    数：OLED写命令
   * 参    数：Command 要写入的命令值，范围：0x00~0xFF
@@ -213,11 +253,15 @@ void OLED_I2C_SendByte(uint8_t Byte)
   */
 void OLED_WriteCommand(uint8_t Command)
 {
+	OLED_Lock();
+	
 	OLED_I2C_Start();				//I2C起始
 	OLED_I2C_SendByte(0x78);		//发送OLED的I2C从机地址
 	OLED_I2C_SendByte(0x00);		//控制字节，给0x00，表示即将写命令
 	OLED_I2C_SendByte(Command);		//写入指定的命令
 	OLED_I2C_Stop();				//I2C终止
+	
+	OLED_Unlock();
 }
 
 /**
@@ -230,6 +274,8 @@ void OLED_WriteData(uint8_t *Data, uint8_t Count)
 {
 	uint8_t i;
 	
+	OLED_Lock();
+	
 	OLED_I2C_Start();				//I2C起始
 	OLED_I2C_SendByte(0x78);		//发送OLED的I2C从机地址
 	OLED_I2C_SendByte(0x40);		//控制字节，给0x40，表示即将写数据
@@ -239,6 +285,8 @@ void OLED_WriteData(uint8_t *Data, uint8_t Count)
 		OLED_I2C_SendByte(Data[i]);	//依次发送Data的每一个数据
 	}
 	OLED_I2C_Stop();				//I2C终止
+	
+	OLED_Unlock();
 }
 
 /*********************通信协议*/
@@ -254,6 +302,9 @@ void OLED_WriteData(uint8_t *Data, uint8_t Count)
   */
 void OLED_Init(void)
 {
+	OLED_MutexInit();    // 新增：初始化互斥锁
+    OLED_Lock();         // 新增：初始化序列期间独占总线/设备
+	
 	OLED_GPIO_Init();			//先调用底层的端口初始化
 	
 	/*写入一系列的命令，对OLED进行初始化配置*/
@@ -297,6 +348,8 @@ void OLED_Init(void)
 	
 	OLED_Clear();				//清空显存数组
 	OLED_Update();				//更新显示，清屏，防止初始化后未显示内容时花屏
+	
+	OLED_Unlock();       //新增：释放锁
 }
 
 /**
@@ -413,6 +466,7 @@ uint8_t OLED_IsInAngle(int16_t X, int16_t Y, int16_t StartAngle, int16_t EndAngl
   */
 void OLED_Update(void)
 {
+	OLED_Lock();
 	uint8_t j;
 	/*遍历每一页*/
 	for (j = 0; j < 8; j ++)
@@ -422,6 +476,8 @@ void OLED_Update(void)
 		/*连续写入128个数据，将显存数组的数据写入到OLED硬件*/
 		OLED_WriteData(OLED_DisplayBuf[j], 128);
 	}
+	
+	OLED_Unlock();
 }
 
 /**
@@ -440,6 +496,8 @@ void OLED_Update(void)
   */
 void OLED_UpdateArea(int16_t X, int16_t Y, uint8_t Width, uint8_t Height)
 {
+	OLED_Lock();
+	
 	int16_t j;
 	int16_t Page, Page1;
 	
@@ -464,6 +522,7 @@ void OLED_UpdateArea(int16_t X, int16_t Y, uint8_t Width, uint8_t Height)
 			OLED_WriteData(&OLED_DisplayBuf[j][X], Width);
 		}
 	}
+	OLED_Unlock();
 }
 
 /**
